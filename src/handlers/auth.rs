@@ -43,18 +43,18 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<CreateUser>,
 ) -> Result<Json<TokenResponse>, StatusCode> {
-    let users = state.users.lock().unwrap();
+    let user = {
+        let users = state.users.lock().unwrap();
 
-    let user = users
-        .iter()
-        .find(|u| u.username == payload.username)
-        .cloned()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-
-    drop(users);
+        users
+            .iter()
+            .find(|u| u.username == payload.username)
+            .cloned()
+            .ok_or(StatusCode::UNAUTHORIZED)?
+    };
 
     let password = payload.password;
-    let password_hash = user.hashed_pasword.clone();
+    let password_hash = user.hashed_pasword;
 
     let correct = tokio::task::spawn_blocking(move || verify_password(&password, &password_hash))
         .await

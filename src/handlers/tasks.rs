@@ -1,16 +1,18 @@
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
 };
 
 use crate::{
+    helpers::auth::AuthUser,
     models::{CreateTask, Task, UpdateTask},
     state::AppState,
 };
 
 pub async fn create(
     State(state): State<AppState>,
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
     Json(payloaod): Json<CreateTask>,
 ) -> (StatusCode, Json<Task>) {
     let mut tasks = state.tasks.lock().unwrap();
@@ -18,6 +20,7 @@ pub async fn create(
 
     let task = Task {
         id: *next_id,
+        user_id,
         tittle: payloaod.tittle,
         done: false,
     };
@@ -32,11 +35,13 @@ pub async fn create(
 pub async fn get_one(
     State(state): State<AppState>,
     Path(id): Path<u32>,
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
 ) -> Result<Json<Task>, StatusCode> {
     let tasks = state.tasks.lock().unwrap();
 
     tasks
         .iter()
+        .filter(|task| task.user_id == user_id)
         .find(|t| t.id == id)
         .map(|t| Json(t.clone()))
         .ok_or(StatusCode::NOT_FOUND)
@@ -45,6 +50,7 @@ pub async fn get_one(
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<u32>,
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
     Json(payloaod): Json<UpdateTask>,
 ) -> Result<Json<Task>, StatusCode> {
     if payloaod.tittle.is_none() && payloaod.done.is_none() {
@@ -53,7 +59,11 @@ pub async fn update(
 
     let mut tasks = state.tasks.lock().unwrap();
 
-    let Some(task) = tasks.iter_mut().find(|t| t.id == id) else {
+    let Some(task) = tasks
+        .iter_mut()
+        .filter(|task| task.user_id == user_id)
+        .find(|t| t.id == id)
+    else {
         return Err(StatusCode::NOT_FOUND);
     };
 
@@ -68,12 +78,17 @@ pub async fn update(
     Ok(Json(task.clone()))
 }
 
-pub async fn delete(State(state): State<AppState>, Path(id): Path<u32>) -> StatusCode {
+pub async fn delete(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
+) -> StatusCode {
     let mut tasks = state.tasks.lock().unwrap();
 
     let Some(index) = tasks
         .iter()
         .enumerate()
+        .filter(|task| task.1.user_id == user_id)
         .find(|(_, t)| t.id == id)
         .map(|result| result.0)
     else {
@@ -85,6 +100,17 @@ pub async fn delete(State(state): State<AppState>, Path(id): Path<u32>) -> Statu
     StatusCode::OK
 }
 
-pub async fn list(State(state): State<AppState>) -> Json<Vec<Task>> {
-    Json(state.tasks.lock().unwrap().to_vec())
+pub async fn list(
+    State(state): State<AppState>,
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
+) -> Json<Vec<Task>> {
+    let tasks = state.tasks.lock().unwrap();
+
+    Json(
+        tasks
+            .iter()
+            .filter(|task| task.user_id == user_id)
+            .cloned()
+            .collect(),
+    )
 }
