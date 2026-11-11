@@ -49,5 +49,8 @@ fn env_var_to_get(env_variables: Vec<String>, env_variable: String) -> String {
         .iter()
         .find(|env| env.split_whitespace().collect::<Vec<&str>>()[0] == env_variable.as_str())
         .expect("Variable not found")
+        .split_whitespace()
+        .collect::<Vec<&str>>()[1]
+        .trim()
         .to_string()
 }
